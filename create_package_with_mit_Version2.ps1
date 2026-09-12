@@ -1,30 +1,66 @@
-# create_package_with_mit.ps1
-# 在当前目录生成一个目录并把初始项目文件写入，然后压缩为 atheist-path-to-longevity-initial.zip
-# 包含 MIT LICENSE（作者使用仓库所有者名）
+<#
+.SYNOPSIS
+  Create an initial project folder with standard files and produce a zip package.
 
-$baseName = "atheist-path-to-longevity-initial"
-$root = Join-Path $PWD $baseName
-$author = "jun-moxiao-yexiuyezai"
-$year = 2026
+.PARAMETER BaseName
+  Name for the generated directory and (by default) the zip file base.
 
-# 清理旧目录（如存在）
-if (Test-Path $root) {
-    Remove-Item -Recurse -Force $root
-}
-New-Item -ItemType Directory -Path $root | Out-Null
+.PARAMETER Author
+  Author name used in the MIT license.
 
-function Write-File($relativePath, $content) {
+.PARAMETER Year
+  Copyright year used in the MIT license (defaults to current year).
+
+.PARAMETER OutputZip
+  Path/name of the generated zip. Defaults to "<BaseName>.zip".
+
+.PARAMETER Force
+  Overwrite existing output (directory or zip) when supplied.
+
+.EXAMPLE
+  .\create_package_with_mit_Version2.ps1 -Force
+#>
+[CmdletBinding()]
+param(
+    [string]$BaseName = "atheist-path-to-longevity-initial",
+    [string]$Author = "jun-moxiao-yexiuyezai",
+    [int]$Year = (Get-Date).Year,
+    [string]$OutputZip = "",
+    [switch]$Force
+)
+
+if (-not $OutputZip) { $OutputZip = "$BaseName.zip" }
+
+$root = Join-Path -Path (Get-Location).Path -ChildPath $BaseName
+
+function Write-File([string]$relativePath, [string]$content) {
     $fullPath = Join-Path $root $relativePath
     $dir = Split-Path $fullPath -Parent
     if (-not (Test-Path $dir)) {
         New-Item -ItemType Directory -Path $dir -Force | Out-Null
     }
-    # 写入 UTF8（无 BOM）
-    Set-Content -Path $fullPath -Value $content -Encoding UTF8
+    # Write UTF-8 without BOM in a cross-version-safe way
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($fullPath, $content, $utf8NoBom)
+    Write-Verbose "Wrote $fullPath"
 }
 
-# README.md
-$readme = @'
+try {
+    # Clean existing output directory if requested
+    if (Test-Path $root) {
+        if ($Force) {
+            Remove-Item -Recurse -Force -Path $root
+            Write-Verbose "Removed existing directory $root"
+        } else {
+            Write-Host "Directory '$root' already exists. Rerun with -Force to overwrite."
+            exit 1
+        }
+    }
+
+    New-Item -ItemType Directory -Path $root | Out-Null
+
+    # README.md
+    $readme = @'
 # 无神论者的长生路
 
 项目目标
@@ -47,12 +83,12 @@ $readme = @'
 - 本项目鼓励理性讨论与学术/工程求真，但禁止发布或协助任何违法、有害的实验或可被滥用的“危险指导”。详见 CODE_OF_CONDUCT 与安全政策文件。
 
 许可与免责声明
-- 本仓库内容以开源许可（待选）发布。所有建议仅供讨论与研究参考，不构成医疗/法律/伦理上的可执行指令。任何涉及人体/临床实验的方案须遵守相关法律与伦理审查。
+- 本仓库内容以开源许可（待选）发布。所有建议仅供讨论与研究参考，不构成医疗/法律/伦理上的可执行指令。任何涉及人体/临床实验的方案须遵守相应的法规和伦理流程。
 '@
-Write-File "README.md" $readme
+    Write-File "README.md" $readme
 
-# features/copilot/plans
-$plans = @'
+    # features/copilot/plans.md (add .md extension)
+    $plans = @'
 # features/copilot/plans
 
 项目定位
@@ -83,10 +119,10 @@ $plans = @'
 - 提交 Issue 时选择合适的 labels：help-wanted, research-proposal, design, ethics
 - 所有涉及人体数据/实验的提案必须包含风险评估与伦理合规计划
 '@
-Write-File "features/copilot/plans" $plans
+    Write-File "features/copilot/plans.md" $plans
 
-# CONTRIBUTING.md
-$contrib = @'
+    # CONTRIBUTING.md
+    $contrib = @'
 # Contributing
 
 欢迎贡献！本项目欢迎各类形式的贡献：问题反馈、讨论主题、文档改进、代码与硬件设计、以及伦理/法律建议。
@@ -113,10 +149,10 @@ $contrib = @'
 许可与贡献者署名
 - 本项目将采用仓库根目录的 LICENSE（如选择），贡献者通过提交即表示同意该许可下贡献代码/文档。
 '@
-Write-File "CONTRIBUTING.md" $contrib
+    Write-File "CONTRIBUTING.md" $contrib
 
-# CODE_OF_CONDUCT.md
-$code = @'
+    # CODE_OF_CONDUCT.md
+    $code = @'
 # Contributor Covenant Code of Conduct
 
 本项目遵循 Contributor Covenant 行为准则（简要版）。我们期待所有参与者保持尊重、专业与包容。任何形式的骚扰、歧视或恶意行为都不被容忍。
@@ -125,13 +161,11 @@ $code = @'
 - 尊重他人：尊重不同观点，避免人身攻击与贬低性言论。
 - 积极沟通：在讨论中以建设性为导向，给出明确、有依据的反馈。
 - 报告机制：若遇到违反行为准则的行为，请通过 Issues 联系维护者或发送电子邮件给仓库管理员（在 Issue 中私信联系方式或使用 repository settings 中的联系方式）。
-
-详细版 Contributor Covenant 文本可参考：https://www.contributor-covenant.org/
 '@
-Write-File "CODE_OF_CONDUCT.md" $code
+    Write-File "CODE_OF_CONDUCT.md" $code
 
-# .github/ISSUE_TEMPLATE/research_proposal.md
-$issue = @'
+    # ISSUE template and PR template
+    $issue = @'
 ---
 name: Research proposal
 about: Submit a research or project proposal for community review
@@ -164,10 +198,9 @@ assignees: ''
 ## 合作者与分工（可选）
 
 '@
-Write-File ".github/ISSUE_TEMPLATE/research_proposal.md" $issue
+    Write-File ".github/ISSUE_TEMPLATE/research_proposal.md" $issue
 
-# .github/PULL_REQUEST_TEMPLATE.md
-$pr = @'
+    $pr = @'
 <!-- Pull request template -->
 
 ## 目的
@@ -185,10 +218,10 @@ $pr = @'
 - [ ] 若涉及数据/实验，包含必要的伦理说明
 
 '@
-Write-File ".github/PULL_REQUEST_TEMPLATE.md" $pr
+    Write-File ".github/PULL_REQUEST_TEMPLATE.md" $pr
 
-# .github/workflows/ci.yml
-$ci = @'
+    # CI workflow
+    $ci = @'
 name: CI
 on:
   push:
@@ -204,13 +237,13 @@ jobs:
       - name: Markdown lint
         uses: igorshubovych/markdownlint-action@v2
 '@
-Write-File ".github/workflows/ci.yml" $ci
+    Write-File ".github/workflows/ci.yml" $ci
 
-# LICENSE (MIT)
-$mit = @"
+    # LICENSE (MIT) - use double-quoted here-string so $Year and $Author are interpolated
+    $mit = @"
 MIT License
 
-Copyright (c) $year $author
+Copyright (c) $Year $Author
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the ""Software""), to deal
@@ -228,4 +261,25 @@ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SO
+SOFTWARE.
+"@
+    Write-File "LICENSE" $mit
+
+    # Create zip package
+    if (Test-Path $OutputZip) {
+        if ($Force) {
+            Remove-Item -Force $OutputZip
+            Write-Verbose "Removed existing zip $OutputZip"
+        } else {
+            Write-Host "Output zip '$OutputZip' already exists. Rerun with -Force to overwrite."
+            exit 1
+        }
+    }
+
+    Compress-Archive -Path (Join-Path $root '*') -DestinationPath $OutputZip -Force
+    Write-Host "Created package: $OutputZip"
+
+} catch {
+    Write-Error "Failed: $_"
+    exit 1
+}
